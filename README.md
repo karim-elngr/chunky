@@ -1,2 +1,2 @@
-# chunky
-A chunk file downloader
+# Chunky
+A fast file downloader
