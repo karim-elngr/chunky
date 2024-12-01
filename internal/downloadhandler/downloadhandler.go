@@ -9,6 +9,7 @@ import (
 	"chunky/pkg/writer"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -94,6 +95,9 @@ func (dh *DownloadHandler) handleInternal(cmd *cobra.Command, _ []string) error 
 
 	// Step 6: Wait for all tasks to complete
 	if err := workManager.Wait(); err != nil {
+		if err := os.Remove(filePath); err != nil {
+			log.Printf("Failed to clean up file %s: %v", filePath, err)
+		}
 		return fmt.Errorf("failed to download file: %w", err)
 	}
 	log.Printf("File downloaded successfully to %s", filePath)
