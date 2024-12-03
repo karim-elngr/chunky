@@ -2,40 +2,84 @@ package cmd
 
 import (
 	"chunky/internal/downloadhandler"
+	"fmt"
 	"github.com/spf13/cobra"
 )
 
-var (
-	url         string
-	directory   string
-	parallelism int
-	size        int64
-	retries     int
+const (
+	url                = "url"
+	shortUrl           = "u"
+	directory          = "directory"
+	shortDirectory     = "d"
+	defaultDirectory   = "."
+	parallelism        = "parallelism"
+	shortParallelism   = "p"
+	defaultParallelism = 4
+	size               = "size"
+	shortSize          = "s"
+	defaultSize        = 1024 * 1024
+	retries            = "retries"
+	shortRetries       = "r"
+	defaultRetries     = 0
+
+	downloadCmd              = `download`
+	downloadShortDescription = `Download a file in chunks`
+	downloadLongDescription  = `Download a file in chunks using multiple goroutines to speed up the process.`
+	downloadExample          = `chunky download -u https://files.testfile.org/PDF/50MB-TESTFILE.ORG.pdf -d /tmp -p 4 -s 1048576`
 )
 
-func init() {
-	downloadCmd.Flags().StringVarP(&url, "url", "u", "", "URL of the file to download (required)")
-	downloadCmd.MarkFlagRequired("url")
-	downloadCmd.Flags().StringVarP(&directory, "directory", "d", ".", "Target directory to save the downloaded file")
-	downloadCmd.Flags().IntVarP(&parallelism, "parallelism", "p", 4, "Number of parallel chunks to download")
-	downloadCmd.Flags().Int64VarP(&size, "size", "s", 1024*1024, "Size of each download chunk in bytes (default: 1MB)")
-	downloadCmd.Flags().IntVarP(&retries, "retries", "r", 0, "Number of retries to download a chunk (default: 0)")
+func newDownloadCmd() *cobra.Command {
 
-	rootCmd.AddCommand(downloadCmd)
-}
-
-var downloadCmd = newDownloadCommand()
-
-func newDownloadCommand() *cobra.Command {
-
-	return &cobra.Command{
-		Use:   "download",
-		Short: "Download a file in chunks",
-		RunE:  cobraDownloadHandler,
+	cmd := &cobra.Command{
+		Use:          downloadCmd,
+		Short:        downloadShortDescription,
+		Long:         downloadLongDescription,
+		Example:      downloadExample,
+		RunE:         run,
+		SilenceUsage: true,
 	}
+
+	cmd.Flags().StringP(url, shortUrl, "", "URL of the file to download (required)")
+	cmd.MarkFlagRequired(url)
+	cmd.Flags().StringP(directory, shortDirectory, defaultDirectory, "Target directory to save the downloaded file")
+	cmd.Flags().IntP(parallelism, shortParallelism, defaultParallelism, "Number of parallel chunks to download")
+	cmd.Flags().Int64P(size, shortSize, defaultSize, "Size of each download chunk in bytes (default: 1MB)")
+	cmd.Flags().IntP(retries, shortRetries, defaultRetries, "Number of retries to download a chunk (default: 0)")
+
+	return cmd
 }
 
-func cobraDownloadHandler(cmd *cobra.Command, args []string) error {
-	dh := downloadhandler.NewDownloadHandler(url, directory, parallelism, size, retries)
-	return dh.CobraDownloadHandler()(cmd, args)
+func run(cmd *cobra.Command, _ []string) error {
+
+	urlValue, err := cmd.Flags().GetString(url)
+	if err != nil {
+		return fmt.Errorf("url flag not found: %w", err)
+	}
+
+	directoryValue, err := cmd.Flags().GetString(directory)
+	if err != nil {
+		return fmt.Errorf("directory flag not found: %w", err)
+	}
+
+	parallelismValue, err := cmd.Flags().GetInt(parallelism)
+	if err != nil {
+		return fmt.Errorf("parallelism flag not found: %w", err)
+	}
+
+	sizeValue, err := cmd.Flags().GetInt64(size)
+	if err != nil {
+		return fmt.Errorf("size flag not found: %w", err)
+	}
+
+	retriesValue, err := cmd.Flags().GetInt(retries)
+	if err != nil {
+		return fmt.Errorf("retries flag not found: %w", err)
+	}
+
+	err = downloadhandler.Handle(cmd.Context(), urlValue, directoryValue, parallelismValue, sizeValue, retriesValue)
+	if err != nil {
+		return fmt.Errorf("failed to download file: %w", err)
+	}
+
+	return nil
 }

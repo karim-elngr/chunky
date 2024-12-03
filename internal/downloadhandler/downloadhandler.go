@@ -5,77 +5,62 @@ import (
 	"chunky/pkg/downloader"
 	"chunky/pkg/header"
 	"chunky/pkg/md5checker"
-	"chunky/pkg/workmanager"
 	"chunky/pkg/writer"
+	"context"
 	"fmt"
-	"log"
+	"github.com/schollz/progressbar/v3"
 	"os"
 	"path/filepath"
-
-	"github.com/spf13/cobra"
+	"strings"
 )
 
-type DownloadHandler struct {
-	url         string
-	directory   string
-	parallelism int
-	size        int64
-	retries     int
-}
-
-func NewDownloadHandler(url string, directory string, parallelism int, size int64, retries int) *DownloadHandler {
-	return &DownloadHandler{
-		url:         url,
-		directory:   directory,
-		parallelism: parallelism,
-		size:        size,
-		retries:     retries,
-	}
-}
-
-func (dh *DownloadHandler) CobraDownloadHandler() func(cmd *cobra.Command, args []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		return dh.handleInternal(cmd, args)
-	}
-}
-
-func (dh *DownloadHandler) handleInternal(cmd *cobra.Command, _ []string) error {
-	ctx := cmd.Context()
+func Handle(ctx context.Context, url string, directory string, parallelism int, size int64, retries int) (err error) {
 
 	// Step 1: Fetch file metadata
 	headerClient := header.NewDefaultHeader(nil)
-	meta, err := headerClient.Head(ctx, dh.url)
+	meta, err := headerClient.Head(ctx, url)
 	if err != nil {
 		return fmt.Errorf("failed to fetch file metadata: %w", err)
 	}
-	log.Printf("File metadata: %+v", meta)
+	fmt.Printf("File name: %v, File size: %v, File signature: %v\n", meta.FileName, meta.ContentSize, meta.Signature)
 
 	// Step 2: Initialize chunker and calculate chunks
-	chunkerClient := chunker.NewChunker(dh.size)
-	chunks, err := chunkerClient.Split(meta.ContentSize)
+	chunks, err := chunker.Split(meta.ContentSize, size)
 	if err != nil {
 		return fmt.Errorf("failed to calculate chunks: %w", err)
 	}
-	log.Printf("Total chunks to download: %d", len(chunks))
+	fmt.Printf("Total chunks to download: %d\n", len(chunks))
 
 	// Step 3: Create an empty file
-	filePath := filepath.Join(dh.directory, meta.FileName)
-	file, err := writer.CreateFile(dh.directory, meta.FileName, meta.ContentSize)
+	filePath := filepath.Join(directory, meta.FileName)
+	file, err := writer.CreateFile(directory, meta.FileName, meta.ContentSize)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		if err := file.Close(); err != nil {
+			fmt.Printf("Failed to close file %s: %v\n", filePath, err)
+		}
+		if err == nil {
+			return
+		}
+		fmt.Printf("Cleaning up file: %s due to error\n", filePath)
+		if err := os.Remove(filePath); err != nil {
+			fmt.Printf("Failed to clean up file %s: %v\n", filePath, err)
+		}
+	}(file)
 
 	// Step 4: Initialize downloader and work manager
 	downloaderClient := downloader.NewDefaultDownloader(nil)
-	workManager := workmanager.NewWorkManager(ctx, dh.parallelism)
-	workManager.WithRetries(dh.retries)
+
+	bar := progressbar.DefaultBytes(meta.ContentSize, "downloading")
+	defer bar.Close()
 
 	// Step 5: Submit tasks to download and write chunks
 	for _, chunk := range chunks {
 		chunk := chunk
-		err := workManager.Submit(func() error {
-			respBody, err := downloaderClient.DownloadChunk(ctx, dh.url, chunk.Offset, chunk.Size)
+		err = func() error {
+			respBody, err := downloaderClient.DownloadChunk(ctx, url, chunk.Offset, chunk.Size)
 			if err != nil {
 				return fmt.Errorf("failed to download chunk at offset %d: %w", chunk.Offset, err)
 			}
@@ -85,32 +70,25 @@ func (dh *DownloadHandler) handleInternal(cmd *cobra.Command, _ []string) error 
 				return fmt.Errorf("failed to write chunk at offset %d: %w", chunk.Offset, err)
 			}
 
-			log.Printf("Chunk at offset %d written successfully", chunk.Offset)
+			bar.Add64(chunk.Size)
+
 			return nil
-		})
+		}()
 		if err != nil {
-			return fmt.Errorf("failed to submit task for chunk at offset %d: %w", chunk.Offset, err)
+			return err
 		}
 	}
 
-	// Step 6: Wait for all tasks to complete
-	if err := workManager.Wait(); err != nil {
-		if err := os.Remove(filePath); err != nil {
-			log.Printf("Failed to clean up file %s: %v", filePath, err)
-		}
-		return fmt.Errorf("failed to download file: %w", err)
-	}
-	log.Printf("File downloaded successfully to %s", filePath)
-
-	// Step 7: Calculate and match the MD5 checksum of the file
-	checker := md5checker.NewMD5Checker(1024 * 1024)
-	actualMD5, err := checker.CalculateMD5(filePath)
+	// Step 6: Calculate and match the MD5 checksum of the file
+	actualMD5, err := md5checker.CalculateMD5(filePath, size)
 	if err != nil {
 		return fmt.Errorf("failed to calculate MD5 checksum: %w", err)
 	}
-	if actualMD5 != meta.Signature {
+	if strings.EqualFold(meta.Signature, actualMD5) {
 		return fmt.Errorf("checksum mismatch: expected %s, got %s", meta.Signature, actualMD5)
 	}
+	fmt.Printf("File downloaded successfully to: %s\n", filePath)
+	fmt.Printf("Checksum matched: %s\n", actualMD5)
 
 	return nil
 }

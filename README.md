@@ -12,5 +12,5 @@ This program is a command-line tool that downloads a file over HTTP in parallel.
 To test the program, use the following example URL:
 
 ```shell
-  chunky download --url=https://files.testfile.org/PDF/50MB-TESTFILE.ORG.pdf --directory=. --parallelism=4 --size=1048576
+  chunky download -u https://files.testfile.org/PDF/50MB-TESTFILE.ORG.pdf -d /tmp -p 4 -s 1048576
 ```

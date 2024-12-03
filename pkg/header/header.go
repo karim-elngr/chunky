@@ -30,7 +30,7 @@ type DefaultHeader struct {
 
 // NewDefaultHeader creates a new DefaultHeader with the provided HTTP client.
 // If no client is provided, http.DefaultClient is used.
-func NewDefaultHeader(client *http.Client) *DefaultHeader {
+func NewDefaultHeader(client *http.Client) Header {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -78,6 +78,11 @@ func (h *DefaultHeader) Head(ctx context.Context, fileURL string) (*FileMeta, er
 	signature := resp.Header.Get("ETag")
 	if signature == "" {
 		return nil, fmt.Errorf("missing ETag header in response")
+	}
+
+	acceptRanges := resp.Header.Get("Accept-Ranges")
+	if acceptRanges != "bytes" {
+		return nil, fmt.Errorf("server does not support byte ranges")
 	}
 
 	return &FileMeta{
