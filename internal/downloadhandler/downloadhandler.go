@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-func Handle(ctx context.Context, url string, directory string, parallelism int, size int64, retries int) (err error) {
+func Handle(ctx context.Context, url string, directory string, parallelism int, size int64) (err error) {
 
 	// Step 1: Fetch file metadata
 	headerClient := header.NewDefaultHeader(nil)
@@ -53,7 +53,7 @@ func Handle(ctx context.Context, url string, directory string, parallelism int, 
 	// Step 4: Initialize downloader and work manager
 	downloaderClient := downloader.NewDefaultDownloader(nil)
 
-	bar := progressbar.DefaultBytes(meta.ContentSize, "downloading")
+	bar := progressbar.DefaultBytes(meta.ContentSize, "Downloading file...")
 	defer bar.Close()
 
 	// Step 5: Submit tasks to download and write chunks

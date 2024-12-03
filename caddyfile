@@ -1,0 +1,12 @@
+{
+    auto_https off
+}
+
+localhost {
+    root * /usr/share/caddy
+    file_server
+
+    header {
+        Accept-Ranges bytes
+    }
+}

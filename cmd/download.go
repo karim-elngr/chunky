@@ -18,9 +18,6 @@ const (
 	size               = "size"
 	shortSize          = "s"
 	defaultSize        = 1024 * 1024
-	retries            = "retries"
-	shortRetries       = "r"
-	defaultRetries     = 0
 
 	downloadCmd              = `download`
 	downloadShortDescription = `Download a file in chunks`
@@ -44,7 +41,6 @@ func newDownloadCmd() *cobra.Command {
 	cmd.Flags().StringP(directory, shortDirectory, defaultDirectory, "Target directory to save the downloaded file")
 	cmd.Flags().IntP(parallelism, shortParallelism, defaultParallelism, "Number of parallel chunks to download")
 	cmd.Flags().Int64P(size, shortSize, defaultSize, "Size of each download chunk in bytes (default: 1MB)")
-	cmd.Flags().IntP(retries, shortRetries, defaultRetries, "Number of retries to download a chunk (default: 0)")
 
 	return cmd
 }
@@ -71,12 +67,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("size flag not found: %w", err)
 	}
 
-	retriesValue, err := cmd.Flags().GetInt(retries)
-	if err != nil {
-		return fmt.Errorf("retries flag not found: %w", err)
-	}
-
-	err = downloadhandler.Handle(cmd.Context(), urlValue, directoryValue, parallelismValue, sizeValue, retriesValue)
+	err = downloadhandler.Handle(cmd.Context(), urlValue, directoryValue, parallelismValue, sizeValue)
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)
 	}
