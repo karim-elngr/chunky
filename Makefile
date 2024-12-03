@@ -1,3 +1,4 @@
+.SILENT:
 
 build:
 	go build
